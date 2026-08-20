@@ -11,12 +11,15 @@ describe('AppController', () => {
       providers: [AppService],
     }).compile();
 
-    appController = app.get<AppController>(AppController);
+    appController = app.get(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  describe('health', () => {
+    it('should return backend health status', () => {
+      expect(appController.getHealth()).toEqual({
+        status: 'UP',
+        service: 'backend',
+      });
     });
   });
 });
