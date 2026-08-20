@@ -7,12 +7,15 @@ type HealthResponse = {
   service: string;
 };
 
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3101";
+
 export default function Home() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("http://localhost:3101/api/health")
+    fetch(`${API_BASE_URL}/api/health`)
       .then((response) => {
         if (!response.ok) {
           throw new Error("Backend request failed");

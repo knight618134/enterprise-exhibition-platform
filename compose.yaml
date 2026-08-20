@@ -16,5 +16,34 @@ services:
       timeout: 5s
       retries: 10
 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: exhibition-backend:dev
+    container_name: exhibition-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://exhibition:exhibition_dev@postgres:5432/exhibition
+      PORT: 3101
+      CORS_ORIGINS: http://localhost:3000,http://localhost:3003
+    ports:
+      - "3102:3101"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: exhibition-frontend:dev
+    container_name: exhibition-frontend
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:3102
+    ports:
+      - "3003:3000"
+
 volumes:
   exhibition-postgres-data:

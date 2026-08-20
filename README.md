@@ -33,7 +33,7 @@ ExhibitionVenue
 
 - `frontend/`：Next.js + TypeScript
 - `backend/`：NestJS + TypeScript
-- `compose.yaml`：目前只管理 PostgreSQL container
+- `compose.yaml`：管理 Frontend、Backend 與 PostgreSQL containers
 - `backend/prisma/schema.prisma`：資料模型來源
 - `backend/prisma/migrations/`：資料庫 migration 歷史
 
@@ -73,12 +73,14 @@ backend/src/exhibition/
 | Port | 位置 | 用途 |
 |---:|---|---|
 | `3000` | 本機 | Next.js frontend |
+| `3003` | 本機 | Docker Compose frontend 對外 port |
 | `3101` | 本機 | NestJS backend |
+| `3102` | 本機 | Docker Compose backend 對外 port |
 | `55432` | 本機 | 連到 Docker PostgreSQL |
 | `5432` | PostgreSQL container 內 | PostgreSQL 預設 port |
 | `5555`（目前環境實際為 `5556`） | 本機 | Prisma Studio，啟動後使用 |
 
-目前 Backend 與 Frontend 是直接在本機執行，只有 PostgreSQL 在 Docker 中。
+目前支援兩種模式：Frontend 與 Backend 可以直接在本機執行，也可以透過 Docker Compose 與 PostgreSQL 一起啟動。
 
 ```text
 本機 NestJS :3101
@@ -88,13 +90,13 @@ backend/src/exhibition/
 Docker PostgreSQL:5432
 ```
 
-如果未來 Backend 也放進 Docker，Backend 會使用 Docker service name 連線：
+當 Backend 放進 Docker 時，Backend 使用 Docker service name 連線：
 
 ```text
 postgresql://exhibition:exhibition_dev@postgres:5432/exhibition
 ```
 
-目前因為 Backend 在本機執行，所以使用：
+如果 Backend 在本機執行，才使用：
 
 ```text
 postgresql://exhibition:exhibition_dev@localhost:55432/exhibition
@@ -112,6 +114,12 @@ cd frontend && npm run dev
 - Frontend：`http://localhost:3000`
 - Backend：`http://localhost:3101`
 - Health API：`http://localhost:3101/api/health`
+
+使用 Docker Compose 時：
+
+- Frontend：`http://localhost:3003`
+- Backend：`http://localhost:3102`
+- Health API：`http://localhost:3102/api/health`
 
 ## 目前 API
 
@@ -176,12 +184,15 @@ meta.total：符合條件的總筆數
 meta.totalPages：總頁數
 ```
 
-## Docker / PostgreSQL 指令
+## Docker Compose 指令
 
 以下指令請在專案根目錄執行：
 
 ```bash
-# 啟動 PostgreSQL
+# 啟動 Frontend + Backend + PostgreSQL（第一次建議加 --build）
+docker compose up -d --build
+
+# 只啟動 PostgreSQL
 docker compose up -d postgres
 
 # 查看本專案 container 狀態
@@ -190,18 +201,113 @@ docker compose ps
 # 查看 PostgreSQL logs
 docker compose logs -f postgres
 
+# 查看 Backend logs
+docker compose logs -f backend
+
+# 查看 Frontend logs
+docker compose logs -f frontend
+
 # 停止 PostgreSQL，但保留資料 volume
 docker compose stop postgres
+
+# 停止所有 compose services，但保留資料 volume
+docker compose stop
 
 # 查看所有 Docker containers
 docker ps
 ```
 
-`compose.yaml` 目前定義一個 service：
+第一次啟動新資料庫 volume 後，請執行 migration：
+
+```bash
+docker compose exec backend npx prisma migrate deploy
+```
+
+## `docker compose up --build` 流程說明
+
+`docker compose up --build` 會先嘗試 build，再啟動 service。是否真的觸發 build，取決於 service 有沒有 `build:` 設定。
+
+目前這個專案的 `compose.yaml` 包含：
+
+```text
+postgres service
+└── 使用 image: postgres:16-alpine
+
+backend service
+└── build: ./backend/Dockerfile
+└── image: exhibition-backend:dev
+
+frontend service
+└── build: ./frontend/Dockerfile
+└── image: exhibition-frontend:dev
+```
+
+所以現在執行：
+
+```bash
+docker compose up --build
+```
+
+會針對 backend 與 frontend 的 Dockerfile 進行 build。Docker 仍會使用 layer cache，只有變更到的層會重建。
+
+若要強制不使用 cache：
+
+```bash
+docker compose build --no-cache backend frontend
+docker compose up -d backend frontend
+```
+
+常用啟動流程（建議）：
+
+```bash
+# 1) 重建並啟動
+docker compose up -d --build
+
+# 2) 套用 migration（第一次或 schema 變更後）
+docker compose exec backend npx prisma migrate deploy
+
+# 3) 檢查 logs
+docker compose logs -f backend
+```
+
+目前 compose 版本為避免和本機 `npm run start:dev` 的 `3101` 衝突，backend 對外使用：
+
+```text
+http://localhost:3102
+```
+
+目前 compose 版本為避免和本機 `npm run dev` 的 `3000` 衝突，frontend 對外使用：
+
+```text
+http://localhost:3003
+```
+
+## Image 命名規則（例如 `exhibition-backend:dev`）
+
+- `exhibition-backend` 是 image repository/name。
+- `dev` 是 tag，用來區分環境或版本。
+- 建議使用小寫英數與 `-`、`_`、`.`。
+- 避免空白與特殊符號，避免大寫以減少跨環境問題。
+
+常見可用範例：
+
+```text
+exhibition-backend:dev
+exhibition-backend:latest
+exhibition-backend:v1.0.0
+```
+
+`compose.yaml` 目前定義三個 services：
 
 ```text
 postgres service
 └── postgres:16-alpine image
+
+backend service
+└── exhibition-backend:dev
+
+frontend service
+└── exhibition-frontend:dev
 ```
 
 `exhibition-postgres-data` 是 named volume，用來保存 PostgreSQL 資料。即使 container 被移除，資料通常仍會保留。
