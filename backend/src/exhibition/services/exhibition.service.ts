@@ -48,9 +48,7 @@ export class ExhibitionService {
       ...(dto.description !== undefined
         ? { description: dto.description }
         : {}),
-      ...(dto.startAt !== undefined
-        ? { startAt: new Date(dto.startAt) }
-        : {}),
+      ...(dto.startAt !== undefined ? { startAt: new Date(dto.startAt) } : {}),
       ...(dto.endAt !== undefined ? { endAt: new Date(dto.endAt) } : {}),
     });
   }
